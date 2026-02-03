@@ -1,8 +1,16 @@
 FROM python:3.11
 
-# Instalar FFmpeg
+# Instalar FFmpeg y sus librerías de desarrollo
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
