@@ -1,8 +1,13 @@
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema necesarias para faster-whisper
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    build-essential \
+    gcc \
+    g++ \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
@@ -10,6 +15,9 @@ WORKDIR /app
 
 # Copiar archivos de dependencias
 COPY requirements.txt .
+
+# Actualizar pip
+RUN pip install --upgrade pip
 
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
