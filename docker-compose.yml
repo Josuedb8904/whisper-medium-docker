@@ -1,9 +1,15 @@
 version: '3.8'
 
+networks:
+  dokploy-network:
+    external: true
+
 services:
   whisper-api:
     build: .
     container_name: whisper-medium-api
+    networks:
+      - dokploy-network
     ports:
       - "9000:9000"
     environment:
@@ -23,6 +29,7 @@ services:
           memory: 4G
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
       - "traefik.http.routers.whisper-api.rule=Host(`whisper.duparfay.com`)"
       - "traefik.http.routers.whisper-api.entrypoints=websecure"
       - "traefik.http.routers.whisper-api.tls=true"
