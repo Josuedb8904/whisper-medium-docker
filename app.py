@@ -2,7 +2,7 @@ import os
 import logging
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
-from faster_whisper import WhisperModel
+import whisper
 import tempfile
 from typing import Optional
 import time
@@ -20,13 +20,11 @@ app = FastAPI(
 
 # Configuración del modelo
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "medium")
-DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
-COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE_MB", "100")) * 1024 * 1024  # 100MB default
 
 # Inicializar modelo
 logger.info(f"Cargando modelo Whisper {MODEL_SIZE}...")
-model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+model = whisper.load_model(MODEL_SIZE)
 logger.info("Modelo cargado exitosamente")
 
 @app.get("/")
@@ -94,7 +92,7 @@ async def transcribe_audio(
         start_time = time.time()
         
         # Transcribir
-        segments, info = model.transcribe(
+        result = model.transcribe(
             temp_path,
             language=language,
             task=task,
