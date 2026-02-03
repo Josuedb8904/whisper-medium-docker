@@ -1,8 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.11
 
-# Instalar FFmpeg
+# Instalar FFmpeg y curl
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
