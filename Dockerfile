@@ -1,6 +1,6 @@
-FROM python:3.11
+FROM python:3.11-slim
 
-# Instalar FFmpeg y curl
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
@@ -9,18 +9,17 @@ RUN apt-get update && apt-get install -y \
 # Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos
+# Copiar archivos de dependencias
 COPY requirements.txt .
-COPY app.py .
 
-# Actualizar pip
-RUN pip install --upgrade pip
-
-# Instalar dependencias
+# Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código de la aplicación
+COPY app.py .
 
 # Exponer puerto
 EXPOSE 9000
 
-# Comando de inicio
+# Comando para iniciar la aplicación
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9000"]
