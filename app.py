@@ -1,55 +1,55 @@
-import os
-import logging
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 import whisper
 import tempfile
+import os
 from typing import Optional
-import time
+import logging
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Crear app FastAPI
 app = FastAPI(
-    title="Whisper Medium API",
-    description="API de transcripción de audio usando Whisper Medium",
+    title="Whisper Audio Transcription API",
+    description="API REST para transcripción de audio usando Whisper Medium",
     version="1.0.0"
 )
 
-# Configuración del modelo
-MODEL_SIZE = os.getenv("WHISPER_MODEL", "medium")
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE_MB", "100")) * 1024 * 1024  # 100MB default
+# Inicializar modelo Whisper Medium (se carga al iniciar)
+logger.info("Cargando modelo Whisper Medium...")
+model = whisper.load_model("medium")
+logger.info("Modelo cargado exitosamente!")
 
-# Inicializar modelo
-logger.info(f"Cargando modelo Whisper {MODEL_SIZE}...")
-model = whisper.load_model(MODEL_SIZE)
-logger.info("Modelo cargado exitosamente")
+# Configuración
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
+ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".mpeg", ".mpga", ".webm", ".ogg", ".flac"}
+
 
 @app.get("/")
 async def root():
-    """Endpoint raíz - información básica de la API"""
+    """Endpoint raíz con información de la API"""
     return {
-        "message": "Whisper Medium API",
+        "message": "Whisper Audio Transcription API",
         "version": "1.0.0",
-        "model": MODEL_SIZE,
-        "device": DEVICE,
+        "model": "medium",
         "endpoints": {
-            "/health": "Estado de salud del servicio",
-            "/transcribe": "Transcribir audio (POST)",
-            "/models": "Información del modelo"
+            "health": "/health",
+            "transcribe": "/transcribe (POST)",
+            "docs": "/docs"
         }
     }
 
+
 @app.get("/health")
 async def health_check():
-    """Endpoint de health check para Dokploy"""
+    """Health check del servicio"""
     return {
         "status": "healthy",
-        "model": MODEL_SIZE,
-        "device": DEVICE
+        "model": "medium",
+        "device": "cpu"
     }
+
 
 @app.post("/transcribe")
 async def transcribe_audio(
@@ -58,94 +58,101 @@ async def transcribe_audio(
     task: Optional[str] = Form("transcribe")
 ):
     """
-    Transcribir archivo de audio
+    Transcribir un archivo de audio
     
-    - **file**: Archivo de audio (MP3, WAV, M4A, etc.)
-    - **language**: Código de idioma (opcional, ej: 'es', 'en')
-    - **task**: 'transcribe' o 'translate' (default: transcribe)
+    Parámetros:
+    - file: Archivo de audio (MP3, WAV, M4A, etc.)
+    - language: Código de idioma (opcional, ej: 'es', 'en'). Si no se especifica, se detecta automáticamente
+    - task: 'transcribe' o 'translate' (traducir a inglés)
+    
+    Retorna:
+    - text: Transcripción completa
+    - segments: Lista de segmentos con timestamps
+    - language: Idioma detectado
     """
     
-    # Validar tamaño del archivo
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Archivo demasiado grande. Máximo: {MAX_FILE_SIZE / 1024 / 1024}MB"
-        )
-    
-    # Validar formato
-    allowed_formats = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.webm']
+    # Validar extensión del archivo
     file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in allowed_formats:
+    if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Formato no soportado. Formatos permitidos: {', '.join(allowed_formats)}"
+            detail=f"Formato de archivo no soportado. Formatos permitidos: {', '.join(ALLOWED_EXTENSIONS)}"
         )
     
-    # Guardar archivo temporal
-    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-        temp_file.write(contents)
-        temp_path = temp_file.name
-    
+    # Leer el archivo
     try:
-        logger.info(f"Transcribiendo archivo: {file.filename}")
-        start_time = time.time()
+        contents = await file.read()
+        file_size = len(contents)
         
-        # Transcribir
+        # Validar tamaño
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Archivo demasiado grande. Tamaño máximo: {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+            )
+        
+        # Guardar temporalmente el archivo
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+            tmp_file.write(contents)
+            tmp_file_path = tmp_file.name
+        
+        logger.info(f"Procesando archivo: {file.filename} ({file_size / 1024:.2f} KB)")
+        
+        # Transcribir con Whisper
         result = model.transcribe(
-            temp_path,
+            tmp_file_path,
             language=language,
-            task=task,
-            vad_filter=True,  # Voice Activity Detection
-            vad_parameters=dict(min_silence_duration_ms=500)
+            task=task
         )
         
         # Procesar segmentos
-        transcription_segments = []
-        full_text = []
+        segments_list = []
+        for segment in result.get("segments", []):
+            segment_dict = {
+                "start": round(segment["start"], 2),
+                "end": round(segment["end"], 2),
+                "text": segment["text"].strip()
+            }
+            segments_list.append(segment_dict)
         
-        for segment in segments:
-            transcription_segments.append({
-                "start": round(segment.start, 2),
-                "end": round(segment.end, 2),
-                "text": segment.text.strip()
-            })
-            full_text.append(segment.text.strip())
+        # Limpiar archivo temporal
+        os.unlink(tmp_file_path)
         
-        duration = time.time() - start_time
-        
-        logger.info(f"Transcripción completada en {duration:.2f}s")
+        logger.info(f"Transcripción completada. Idioma: {result.get('language', 'unknown')}")
         
         return JSONResponse(content={
             "success": True,
-            "text": " ".join(full_text),
-            "segments": transcription_segments,
-            "language": info.language,
-            "language_probability": round(info.language_probability, 2),
-            "duration": round(info.duration, 2),
-            "processing_time": round(duration, 2)
+            "text": result["text"].strip(),
+            "segments": segments_list,
+            "language": result.get("language", "unknown"),
+            "file_name": file.filename
         })
         
     except Exception as e:
-        logger.error(f"Error en transcripción: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error al transcribir: {str(e)}")
+        # Limpiar archivo temporal en caso de error
+        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
         
-    finally:
-        # Limpiar archivo temporal
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+        logger.error(f"Error al procesar audio: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar el audio: {str(e)}"
+        )
+
 
 @app.get("/models")
-async def get_model_info():
-    """Información sobre el modelo actual"""
+async def get_models():
+    """Información sobre el modelo cargado"""
     return {
-        "model_size": MODEL_SIZE,
-        "device": DEVICE,
-        "compute_type": COMPUTE_TYPE,
-        "max_file_size_mb": MAX_FILE_SIZE / 1024 / 1024
+        "current_model": "medium",
+        "device": "cpu",
+        "supported_languages": [
+            "es", "en", "fr", "de", "it", "pt", "nl", "pl", "ru", "ja", 
+            "ko", "zh", "ar", "tr", "vi", "th", "sv", "da", "no", "fi"
+        ]
     }
+
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "9000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=9000)
