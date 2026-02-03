@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para faster-whisper
+# Instalar todas las dependencias necesarias para faster-whisper y PyAV
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     build-essential \
@@ -8,6 +8,14 @@ RUN apt-get update && apt-get install -y \
     g++ \
     git \
     curl \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
@@ -16,8 +24,8 @@ WORKDIR /app
 # Copiar archivos de dependencias
 COPY requirements.txt .
 
-# Actualizar pip
-RUN pip install --upgrade pip
+# Actualizar pip y wheel
+RUN pip install --upgrade pip setuptools wheel
 
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
