@@ -21,3 +21,10 @@ services:
           memory: 8G
         reservations:
           memory: 4G
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whisper-api.rule=Host(`whisper.duparfay.com`)"
+      - "traefik.http.routers.whisper-api.entrypoints=websecure"
+      - "traefik.http.routers.whisper-api.tls=true"
+      - "traefik.http.routers.whisper-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whisper-api.loadbalancer.server.port=9000"
