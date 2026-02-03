@@ -4,8 +4,8 @@ services:
   whisper-api:
     build: .
     container_name: whisper-medium-api
-    expose:
-      - "9000"
+        ports:
+      - "9000:9000"
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
